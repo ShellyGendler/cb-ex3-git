@@ -1,32 +1,28 @@
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+import os
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import normalize
 
-# Creating digit images with different fonts
-def create_digit_images(digit, fonts, image_size=(28, 28)):
-    images = []
-    for font_path in fonts:
-        try:
-            font = ImageFont.truetype(font_path, 24)
-        except OSError:
-            print(f"Cannot open font file: {font_path}")
-            continue
-        image = Image.new('L', image_size, color=255)  # 'L' for (8-bit pixels, black and white)
-        draw = ImageDraw.Draw(image)
-        bbox = draw.textbbox(((0, 0)), str(digit), font=font)
-        width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text(((image_size[0] - width) / 2, (image_size[1] - height) / 2), str(digit), fill=0, font=font)
-        images.append(np.array(image).flatten())
-    return images
-
-# Initializing neurons with digit images in different fonts
-def initialize_neurons_with_fonts(digits, fonts, num_neurons_per_digit):
+# Function to initialize neurons with pre-created images from a directory
+def initialize_neurons_with_images(digits, image_dir, num_neurons_per_digit):
     neurons = []
     for digit in digits:
-        digit_images = create_digit_images(digit, fonts)
-        neurons.extend(digit_images[:num_neurons_per_digit])
-    return np.array(neurons)
+        for filename in os.listdir(image_dir):
+            if filename.startswith(f'digit_{digit}_font_'):
+                image_path = os.path.join(image_dir, filename)
+                image = Image.open(image_path)
+                # array flattening
+                neurons.append(np.array(image, dtype=np.float64).flatten())
+                if len(neurons) >= (digit + 1) * num_neurons_per_digit:
+                    # move to the next digit
+                    break
+                # finish viewing all the pictures
+        if len(neurons) >= num_neurons_per_digit * len(digits):
+            break
+        # convert it to array
+    neurons_array = np.array(neurons, dtype=np.float64)
+    return neurons_array
+
 
 # Finding the Best Matching Unit (BMU)
 def find_bmu(neurons, input_vector):
@@ -46,19 +42,18 @@ def update_neurons(neurons, bmu_index, input_vector, learning_rate, radius):
 # Training the SOM
 def train_som(data, neurons, num_epochs, initial_learning_rate, initial_radius):
     time_constant = num_epochs / np.log(initial_radius)
-   
     for epoch in range(num_epochs):
+        # learning rate and radius both decrease over time
         learning_rate = initial_learning_rate * np.exp(-epoch / num_epochs)
         radius = initial_radius * np.exp(-epoch / time_constant)
-       
         for input_vector in data:
             bmu_index = find_bmu(neurons, input_vector)
             neurons = update_neurons(neurons, bmu_index, input_vector, learning_rate, radius)
-   
     return neurons
 
 # Plotting the SOM
 def plot_som(neurons, size):
+    # there are 100 output pictures whose size is 28 X 28
     som_map = neurons.reshape(size, size, 28, 28)
     fig, ax = plt.subplots(size, size, figsize=(10, 10))
     for i in range(size):
@@ -67,38 +62,34 @@ def plot_som(neurons, size):
             ax[i, j].axis('off')
     plt.show()
 
-# Example usage
 if __name__ == "__main__":
-    # List of digits
     digits = list(range(10))
-
-    # List of font paths (update the paths accordingly)
-    fonts = [
-        'C:/Windows/Fonts/Arial.ttf',
-        'C:/Windows/Fonts/Calibri.ttf',
-        'C:/Windows/Fonts/Times.ttf',
-        'C:/Windows/Fonts/Verdana.ttf',
-        'C:/Windows/Fonts/Corbel.ttf'
-    ]
-
-    # Number of neurons per digit
+    image_dir = r'C:\Users\Admin\PycharmProjects\cb-ex3\cb-ex3-git\pre_created_images'  # Directory where pre-created images are saved
     num_neurons_per_digit = 10
+    total_neurons = len(digits) * num_neurons_per_digit
+    size = int(np.sqrt(total_neurons))
 
-    # Creating neurons
-    neurons = initialize_neurons_with_fonts(digits, fonts, num_neurons_per_digit)
-
-    # Loading data and preparing it (example)
-    data = np.loadtxt(r"C:\Users\Admin\Downloads\digits_test.csv", delimiter=',')
-    data = normalize(data, axis=1, norm='l2')
-
-    # Exercise settings
-    num_epochs = 100
-    initial_learning_rate = 0.1
-    initial_radius = 5
-    size = int(np.sqrt(len(neurons)))
-
-    # Training the network
-    neurons = train_som(data, neurons, num_epochs, initial_learning_rate, initial_radius)
-
-    # Displaying the network
-    plot_som(neurons, size)
+    if size ** 2 != total_neurons:
+        raise ValueError(f"Total number of neurons {total_neurons} is not a perfect square. Adjust the number of neurons per digit.")
+    
+    # Initialize neurons with pre-created images
+    neurons = initialize_neurons_with_images(digits, image_dir, num_neurons_per_digit)
+    
+    # Load data and normalize
+    data_path = r"C:\Users\Admin\Downloads\digits_test.csv"
+    try:
+        data = np.loadtxt(data_path, delimiter=',')
+    except FileNotFoundError:
+        print(f"File not found: {data_path}")
+    else:
+        # data = normalize(data, axis=1, norm='l2')
+        
+        num_epochs = 10
+        initial_learning_rate = 0.1
+        initial_radius = 5
+        
+        # Train the SOM
+        neurons = train_som(data, neurons, num_epochs, initial_learning_rate, initial_radius)
+        
+        # Plot the SOM
+        plot_som(neurons, size)

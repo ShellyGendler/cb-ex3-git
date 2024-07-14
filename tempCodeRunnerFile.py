@@ -1,0 +1,1 @@
+'C:\Users\Admin\PycharmProjects\cb-ex3\cb-ex3-git\pre_created_images'
